@@ -2,6 +2,8 @@
 #include <cassert>
 #include <cstdlib>
 
+#include "SegregatedFreeLists.hpp"
+
 #define MAX_DISK_NUM (10 + 1)
 #define MAX_DISK_SIZE (16384 + 1)
 #define MAX_REQUEST_NUM (30000000 + 1)
@@ -31,6 +33,8 @@ int T, M, N, V, G;
 int disk[MAX_DISK_NUM][MAX_DISK_SIZE];
 int disk_point[MAX_DISK_NUM];   // 磁头位置
 
+std::vector<SegregatedFreeList> segregatedFreeLists(MAX_DISK_NUM);
+
 void timestamp_action()
 {
     int timestamp;
@@ -49,6 +53,18 @@ void do_object_delete(const int* object_unit, int* disk_unit, int size)
     }
 }
 
+/**
+ * 调用分离空闲链表时的删除动作
+*/
+void do_object_delete(const int* object_unit, int disk_num, int size) {
+    std::vector<int> allocated(size + 1);
+    for (int i = 1; i <= size; i++) {
+        disk[disk_num][object_unit[i]] = 0;
+        allocated[i] = object_unit[i];
+    }
+    segregatedFreeLists[disk_num].freeBlock(allocated);
+}
+
 void delete_action()
 {
     int n_delete;
@@ -60,6 +76,7 @@ void delete_action()
         scanf("%d", &_id[i]);
     }
 
+    // 如果删除时还没读完，就撤销
     for (int i = 1; i <= n_delete; i++) {
         int id = _id[i];
         int current_id = object[id].last_request_point;
@@ -84,7 +101,8 @@ void delete_action()
         }
         // 删除object[id]号对象在replica[j]号磁盘上的size个存储单元，j = 1~3
         for (int j = 1; j <= REP_NUM; j++) {
-            do_object_delete(object[id].unit[j], disk[object[id].replica[j]], object[id].size);
+            // do_object_delete(object[id].unit[j], disk[object[id].replica[j]], object[id].size);
+            do_object_delete(object[id].unit[j], object[id].replica[j], object[id].size);
         }
         object[id].is_delete = true;
     }
@@ -108,6 +126,19 @@ void do_object_write(int* object_unit, int* disk_unit, int size, int object_id)
     assert(current_write_point == size);
 }
 
+/**
+ * 调用分离空闲链表的写动作
+ */
+void do_object_write(int* object_unit, int disk_num, int size, int object_id)
+{
+    std::vector<int> allocated = segregatedFreeLists[disk_num].allocate(size);
+    // 为了与demo代码保持一致
+    for (int i = 1; i <= size; ++i) {
+        disk[disk_num][allocated[i]] = object_id;
+        object_unit[i] = allocated[i];
+    }
+}
+
 void write_action()
 {
     int n_write;
@@ -117,13 +148,13 @@ void write_action()
         scanf("%d%d%d", &id, &size, &tag);
         object[id].last_request_point = 0;
 
-        // 写策略
         for (int j = 1; j <= REP_NUM; j++) {
-            object[id].replica[j] = (id + j) % N + 1;
+            object[id].replica[j] = (id + j) % N + 1;   // 磁盘调度算法，选中第 object[id].replica[j] 号磁盘
             object[id].unit[j] = static_cast<int*>(malloc(sizeof(int) * (size + 1)));
             object[id].size = size;
             object[id].is_delete = false;
-            do_object_write(object[id].unit[j], disk[object[id].replica[j]], size, id);
+            // do_object_write(object[id].unit[j], disk[object[id].replica[j]], size, id);
+            do_object_write(object[id].unit[j], object[id].replica[j], size, id);
         }
 
         printf("%d\n", id);
@@ -209,6 +240,10 @@ void clean()
 int main()
 {
     scanf("%d%d%d%d%d", &T, &M, &N, &V, &G);
+    // 分离空闲连表管理存储单元分配算法
+    for (int i = 1; i <= N; ++i) {
+        segregatedFreeLists[i] = SegregatedFreeList(V);
+    }
 
     // TODO: 以下全局信息可以被用来优化策略，暂时不利用也不影响
 

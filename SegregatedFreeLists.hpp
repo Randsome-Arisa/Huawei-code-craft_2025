@@ -3,7 +3,7 @@
 #include <vector>
 #include <cassert>
 
-#define MAX_OBJ_SIZE (5)
+#include "limit.h"
 
 // 表示一个空闲的磁盘块（区间）
 struct Block {
@@ -24,6 +24,106 @@ private:
     // buckets[5] 用于管理超过 5 的大块空闲空间
     std::vector<std::list<Block>> buckets;
 
+    /*
+     * 尝试分配连续的 size 大小的内存块
+     * 采用Worst-Fit策略
+     * @param size: 要分配的内存块大小
+     * @return: 分配成功返回一个被分配地址的 vector，否则返回空 vector
+    */
+    std::vector<int> allocate_contiguous(int requestSize) {
+        for (int i = MAX_OBJ_SIZE; i >= requestSize - 1; --i) {
+            auto& bucket = buckets[i];
+            if (!bucket.empty()) {
+                auto best_it;
+                if (i == MAX_OBJ_SIZE) {
+                    best_it = std::max_element(bucket.begin(), bucket.end(), 
+                        [](const Block& a, const Block& b){ return a.size > b.size; });
+                }
+                else {
+                    best_it = bucket.begin();
+                }
+
+                Block block = *best_it;
+                bucket.erase(best_it);
+    
+                // 分割处理
+                if (block.size > requestSize) {
+                    int remaining = block.size - requestSize;
+                    int bucketIdx = (remaining <= MAX_OBJ_SIZE) ? remaining - 1 : MAX_OBJ_SIZE;
+                    buckets[bucketIdx].emplace_back(block.start + requestSize, remaining);
+                }
+    
+                std::vector<int> units(requestSize + 1);
+                for (int i = 1; i <= requestSize; ++i) {
+                    units[i] = block.start + i - 1;
+                }
+                return units;
+            }
+        }
+        return {};
+    }
+
+    /*
+     * 尝试分配不连续的 size 大小的内存块
+     * 采用Worst-Fit策略
+     * @param size: 要分配的内存块大小
+     * @return: 分配成功返回一个地址升序的被分配地址 vector，否则返回空 vector
+    */
+    std::vector<int> allocate_noncontiguous(int requestSize) {
+        std::vector<int> units;
+        units.reserve(requestSize + 1); // 提前预留空间，省去扩容耗时
+        units.emplace_back(0); // 首元素占位
+        
+        // 生成可能的分割组合（按从大到小排序）,<int,int>表示<分割大小,分割数量>
+        // 例如requestSize=5时，partitions={{[4,1],[1,1]}, {[3,1],[2,1]}, {[2,2],[1,1]}, {[1,5]}}
+        std::vector<std::unordered_map<int, int>> partitions;
+        for (int main_size = requestSize - 1; main_size >= 1; --main_size) {
+            int remaining = requestSize - main_size;
+            std::unordered_map<int, int> partition;
+
+            partition[main_size] = 1;
+            while (remaining >= main_size) {
+                partition[remaining]++;
+                remaining -= main_size;
+            }
+            if (remaining > 0) {
+                partition[remaining]++;
+            }
+            partitions.emplace_back(partition);
+        }
+
+        // 尝试每个分割方案
+        for (const auto& partation : partitions) {
+            bool success = true;
+            
+            // 注意，调用非连续分配方法时，已经没有buckets[MAX_OBJ_SIZE]了
+            // 尝试分配每个部分
+            for (const pair<int, int>& part : partation) {
+                if (buckets[part.first - 1].size() < part.second) {
+                    success = false;
+                    break;
+                }
+            }
+            
+            // 按照该方案进行分配
+            if (success) {
+                for (const pair<int, int>& part : partation) {
+                    for (int i = 0; i < part.second; ++i) {
+                        auto allocated = allocate_contiguous(part.first);
+                        for (auto it = allocaed.begin(); it != allocated.end(); ++it) {
+                            units.emplace_back(*it);
+                        }
+                    }
+                }
+
+                // 按物理地址排序（提升读取效率）
+                std::sort(units.begin() + 1, units.end());
+                return units;
+            }
+        }
+        return {};
+    }
+
     // 用于合并新释放的块 newBlock 与相邻的空闲块（如果存在）
     void mergeAndInsert(Block newBlock) {
         bool merged = true;
@@ -31,7 +131,7 @@ private:
         while (merged) {
             merged = false;
             // 遍历所有桶
-            for (size_t b = 0; b < buckets.size(); ++b) {
+            for (int b = 0; b < buckets.size(); ++b) {
                 for (auto it = buckets[b].begin(); it != buckets[b].end(); ++it) {
                     // 若该空闲块在 newBlock 之前且正好相邻
                     if (it->end() == newBlock.start) {
@@ -59,62 +159,63 @@ private:
 public:
     SegregatedFreeList() : buckets(MAX_OBJ_SIZE + 1) {}
     // 初始化时整个磁盘内存从 0 到 totalSize 为连续空闲区域
-    // TODO: 考虑有没有更好的初始化方法
+    // TODO: 考虑有没有更好的初始化方法，例如为预处理得知的读取较多的对象预先分配专属的空间区域
     SegregatedFreeList(int totalSize) : buckets(MAX_OBJ_SIZE + 1) {
         buckets[MAX_OBJ_SIZE].push_back(Block(1, totalSize));
     }
     
-    // 分配 requestSize 大小的连续内存块
+    // 分配 requestSize 大小的内存块
     // 返回分配的内存块，如果分配失败返回 nullptr
-    std::vector<int> allocate(int requestSize) {
-        // 为保持与demo风格一致，首位不存元素
-        std::vector<int> allocated(requestSize + 1);
-        // 在 requestSize 对应的桶中查找
-        // ? 这里从size为1开始优先找小块，算是best-fit算法，也可以试试worst-fit优先找大块
-        for (int i = requestSize - 1; i <= MAX_OBJ_SIZE; ++i) {
-            if (!buckets[i].empty()) {
-                // 找到一个块，取出它
-                Block block = buckets[i].front();
-                buckets[i].pop_front();
-
-                // 如果块大小正好等于请求大小，则直接返回，否则需要处理
-                if (block.size > requestSize) {
-                    // 分割出一个 requestSize 大小的块，剩余部分需要重新插入合适桶中
-                    int remainingSize = block.size - requestSize;
-                    int remainingStart = block.start + requestSize;
-                    // 根据剩余大小放入对应的桶
-                    int bucketIndex = remainingSize <= MAX_OBJ_SIZE ? remainingSize - 1 : MAX_OBJ_SIZE;
-                    buckets[bucketIndex].push_back(Block(remainingStart, remainingSize));
-                }
-
-                for (int j = 1; j <= requestSize; j++) {
-                    allocated[j] = block.start + j - 1;
-                }
-                return allocated;
-            }
-        }
-        // 如果上面没找到合适的块，就必须分配分离的存储单元
-        // 此时一定 2 <= requestSize <= 5
-        // 优先从比请求小的块中较大的块分配，有利于连续读
-        // int index = requestSize - 2;
-        // while (buckets[index].empty()) {
-        //     --index;
-        //     assert(index >= 0);
-        // }
-        // Block block = buckets[index].front();
-        // buckets[index].pop_front();
-        // for (int i = 1; i <= block.size; ++i) {
-        //     allocated[i] = block.start + i - 1;
-        // }
-        // requestSize -= index + 1;
-        // std::vector<int> v2 = allocate(requestSize);
-        // allocated.insert(allocated.begin() + 1 + block.size, v2.begin() + 1, v2.end());
-        // return allocated;
-        return std::vector<int>();
+    std::vector<int> allocate(int requestSize) {        
+        // 优先尝试分配连续空间
+        if (std::vector<int> allocated = allocate_contiguous(requestSize))
+            return allocated;
+        
+        // 无法连续分配时采用分块策略
+        return allocate_fragmented(requestSize);
     }
 
     // 释放磁盘块，将其归还到对应的空闲链表中
-    void freeBlock() {
+    void freeBlock(const std::vector<int>& allocated_units) {
+        // 将分散的存储单元转换为连续块（默认已排序）
+        std::vector<Block> to_free;
+        int current_start = allocated_units[1]; // 跳过首元素
+        int current_size = 1;
+        
+        for (size_t i = 2; i < allocated_units.size(); ++i) {
+            if (allocated_units[i] == allocated_units[i-1] + 1) {
+                current_size++;
+            } else {
+                to_free.emplace_back(current_start, current_size);
+                current_start = allocated_units[i];
+                current_size = 1;
+            }
+        }
+        to_free.emplace_back(current_start, current_size);
+
+        // 合并每个连续块
+        for (auto& block : to_free) {
+            mergeAndInsert(block);
+        }
+    }
+
+    // 返回最大的空闲块size
+    int get_largest_free_block_size() {
+        if (!buckets[4].empty() || !buckets[5].empty()) {
+            return 5;
+        }
+        else if (!buckets[3].empty()) {
+            return 4;
+        }
+        else if (!buckets[2].empty()) {
+            return 3;
+        }
+        else if (!buckets[1].empty()) {
+            return 2;
+        }
+        else {
+            return 1;
+        }
     }
 
     // 用于调试，打印所有桶中的空闲块信息

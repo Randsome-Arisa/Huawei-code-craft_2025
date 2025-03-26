@@ -11,10 +11,10 @@ class Object {
     int id; // 对象ID
     int tag;    // 对象标签
     int size;   // 对象大小
-    bool is_deleteed;
 
-    Replica replica[REP_NUM + 1]; // 3个备份的信息
+    Replica replicas[REP_NUM]; // 3个备份的信息
 
     // int create_timestamp;   // 创建的时间片
+    // TODO: 动态存储读取优先级
     // TODO: 添加磁头位置缓存以进行优化
 };

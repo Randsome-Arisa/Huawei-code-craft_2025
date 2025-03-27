@@ -66,12 +66,11 @@ void write_action()
     fflush(stdout);
 }
 
-// ! 未完善，正在写
 void read_action(int timestamp) {
     int n_read;
     scanf("%d", &n_read);
     int request_id, object_id;
-    std::vector<std::string> points_action(N); // 每个磁头的动作
+    std::vector<std::string> points_action(N + 1, ""); // 每个磁头的动作
     std::vector<int> completed_requests; // 可以上报的请求
     for (int i = 0; i < n_read; i++) {
         scanf("%d%d", &request_id, &object_id);

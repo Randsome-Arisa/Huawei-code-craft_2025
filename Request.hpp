@@ -1,7 +1,7 @@
 enum class Status {
     PENDING,    // 还没开始读的
     READING     // 正在连续读的
-}
+};
 
 class Request {
     int req_id; // 请求id
@@ -24,9 +24,13 @@ class Request {
     }
 
     // TODO: 完善优先级算法
-    void update_priority(int current_time) {
-        float time_factor = 1.0f - (deadline - current_time)/100.0f;
-        float delete_factor = is_marked_delete ? 2.0f : 1.0f;
-        priority = delete_factor * (time_factor + processed_units/100.0f);
+    /*
+     * 我的设想是：
+     * 1. 如果该对象正在被读，那优先级应该最高
+     * 2. 否则，取决于对象大小和距离开始请求的时间
+     * 3. 还可以考虑的因素包括对象的连续性等
+     */ 
+    void set_priority(int current_time) {
+        
     }
 };

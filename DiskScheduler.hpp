@@ -39,7 +39,8 @@ private:
         // <Disk, score>，score为优先级得分
         std::vector<std::pair<Disk, float>> candidate_disks;
         
-        for (Disk& disk : disks) {
+        for (int i = 1; i <= numDisks; ++i) {
+            Disk& disk = disks[i];
             // 对象越大，越需要有连续的空间可以存储该对象，否则每次读的耗时就越大
             // 用 size_ratio 表示这个对象对连续空间的依赖程度
             float size_ratio = (float)size / MAX_OBJ_SIZE;

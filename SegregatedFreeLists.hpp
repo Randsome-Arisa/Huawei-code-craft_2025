@@ -1,7 +1,6 @@
 #include <iostream>
 #include <list>
 #include <vector>
-#include <cassert>
 
 #include "limit.h"
 
@@ -11,10 +10,6 @@ struct Block {
     int size;   // 块大小
 
     Block(int s, int sz) : start(s), size(sz) {}
-
-    int end() const {
-        return start + size;
-    }
 };
 
 // 分离空闲链表管理器
@@ -161,18 +156,24 @@ public:
     // 初始化时整个磁盘内存从 0 到 totalSize 为连续空闲区域
     // TODO: 考虑有没有更好的初始化方法，例如为预处理得知的读取较多的对象预先分配专属的空间区域
     SegregatedFreeList(int totalSize) : buckets(MAX_OBJ_SIZE + 1) {
-        buckets[MAX_OBJ_SIZE].push_back(Block(1, totalSize));
+        buckets[MAX_OBJ_SIZE].emplace_back(Block(1, totalSize));
     }
     
     // 分配 requestSize 大小的内存块
-    // 返回分配的内存块，如果分配失败返回 nullptr
-    std::vector<int> allocate(int requestSize) {        
+    // 返回分配的内存块，如果分配失败返回空数组
+    std::vector<int> allocate(int requestSize) {
+        std::vector<int> allocated;
         // 优先尝试分配连续空间
-        if (std::vector<int> allocated = allocate_contiguous(requestSize))
+        if (allocated = allocate_contiguous(requestSize)) {
             return allocated;
-        
+        }
+            
         // 无法连续分配时采用分块策略
-        return allocate_fragmented(requestSize);
+        if (allocated = allocate_fragmented(requestSize)) {
+            return allocated;
+        }
+
+        return {};
     }
 
     // 释放磁盘块，将其归还到对应的空闲链表中

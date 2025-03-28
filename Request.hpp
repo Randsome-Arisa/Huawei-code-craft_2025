@@ -1,7 +1,7 @@
 enum class Status {
-    PENDING,    // 还没开始读的
-    READING     // 正在连续读的
-}
+	PENDING,    // 还没开始读的
+	READING     // 正在连续读的
+};
 
 class Request {
     int req_id; // 请求id

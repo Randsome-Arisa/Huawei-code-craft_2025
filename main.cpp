@@ -48,12 +48,23 @@ void write_action()
 {
     int n_write;
     scanf("%d", &n_write);
-    // TODO: 这里可以不按顺序写入，任务书中说输出的写入顺序和输入的可以不一致，或许这里可以预处理后写入得到更好的效果
+    // 优先分配标签热度高的，一样高时优先分配大小大的对象
+    auto comp = [](const Object& a, const Object& b) {
+        if (diskScheduler.tag_heat[a.tag] != diskScheduler.tag_heat[b.tag])
+            return diskScheduler.tag_heat[a.tag] < diskScheduler.tag_heat[b.tag];
+        return a.size > b.size;
+    }
+    std::priority_queue<Object, std::vector<Object>, decltype(comp)> objects_to_be_written(comp);
+
     for (int i = 1; i <= n_write; i++) {
         int id, size, tag;
         scanf("%d%d%d", &id, &size, &tag);
         printf("%d\n", id);
-        Object obj = diskScheduler.write_object(id, size, tag);
+        Object obj = Object(id, size, tag);
+        objects_to_be_written.push(obj);
+    }
+    while (!objects_to_be_written.empty()) {
+        Object obj = diskScheduler.write_object(objects_to_be_written.top());
         for (int j = 0; j < REP_NUM; J++) {
             printf("%d ", obj.replicas[j].disk_id);
             for (int unit : obj.replicas[j].units) {
@@ -61,6 +72,7 @@ void write_action()
             }
             printf("\n");
         }
+        objects_to_be_written.pop();
     }
 
     fflush(stdout);
@@ -92,28 +104,27 @@ void read_action(int timestamp) {
 
 int main() {
     scanf("%d%d%d%d%d", &T, &M, &N, &V, &G);
-    // TODO: 以下全局信息可以被用来优化策略，暂时不利用也不影响
+    // (T - 1) / FRE_PER_SLICING + 1 等价于 ceil(T / 1800)
+    int n_epoch = (T - 1) / FRE_PER_SLICING + 1;    // 每1800时间片一个epoch
+    // 用一个三维数组tag_info[tag][epoch][删/写/读]存储每个标签在每个epoch中删除、写入、读取的对象块数量
+    std::vector<std::vector<std::array<int, 3>>> tag_info(M + 1, std::vector<std::array<int, 3>>(n_epoch + 1, {0, 0, 0}))
 
     // 读取每个标签分别删除了几个对象块
     for (int i = 1; i <= M; i++) {
-        // (T - 1) / FRE_PER_SLICING + 1 等价于 ceil(T / 1800)
         for (int j = 1; j <= (T - 1) / FRE_PER_SLICING + 1; j++) {
-            scanf("%*d");
+            scanf("%d", &tag_info[i][j][0]);
         }
     }
-
     // 读取每个标签分别写了几个对象块
     for (int i = 1; i <= M; i++) {
         for (int j = 1; j <= (T - 1) / FRE_PER_SLICING + 1; j++) {
-            scanf("%*d");
+            scanf("%d", &tag_info[i][j][1]);
         }
     }
-
-    // TODO: 为读取较多的标签优先分配连续空间
     // 读取每个标签分别读了几个对象块
     for (int i = 1; i <= M; i++) {
         for (int j = 1; j <= (T - 1) / FRE_PER_SLICING + 1; j++) {
-            scanf("%*d");
+            scanf("%d", &tag_info[i][j][2]);
         }
     }
 
@@ -121,13 +132,17 @@ int main() {
     fflush(stdout);
 
     // 磁盘调度器，用于控制读写删操作
-    diskScheduler = DiskScheduler(N, V, G);
+    diskScheduler = DiskScheduler(M, N, V, G);
 
     for (int t = 1; t <= T + EXTRA_TIME; t++) {
+        // 每个epoch更新一次标签热度
+        if ((t - 1) % FRE_PER_SLICING == 0) {
+            diskScheduler.update_tag_heat((t - 1) / FRE_PER_SLICING);
+        }
         timestamp_action();
         delete_action();
         write_action();
-        read_action();
+        read_action(t);
     }
 
     return 0;

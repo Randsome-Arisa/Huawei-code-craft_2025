@@ -14,8 +14,12 @@ using RequestQueue = std::priority_queue<
 
 class DiskScheduler {
 private:
+    static int numTag;   // tag数
     static int numDisks;
     const int G;
+    std::vector<std::vector<std::array<int, 3>>> tag_info; // 每个标签在每个epoch中删除、写入、读取的对象块数量
+    // 维护一个二维标签热度数组tag_heat[tag][epoch]，本轮和下一轮中（这个窗口可以调整）该标签读得越多越热，删得越少越热
+    std::vector<std::vector<float>> tag_heat;
     std::vector<Disk> disks;
     std::unordered_map<int, Object> saved_objects;    // <object_id, Object>
     std::unordered_map<int, Request> requests;    // <request_id，Request>
@@ -72,11 +76,13 @@ private:
 
 
 public:
-    DiskScheduler(int numDisks, int disk_size, int token_G) : numDisks(numDisks), G(token_G){
+    DiskScheduler(int, M, int numDisks, int disk_size, int token_G, std::vector<std::vector<std::array<int, 3>>>& tag_info) : numTag(M), numDisks(numDisks), G(token_G){
         disks.emplace_back();   // 从1开始索引
         for (int i = 1; i <= numDisks; ++i) {
             disks.emplace_back(i, disk_size, 0);
         }
+        this->tag_info = tag_info;
+        this->update_tag_heat();
     }
 
     void add_request(int req_id, int object_id, int start_timestamp) {
@@ -84,6 +90,22 @@ public:
         requests[req_id] = req;
         // ? 如果优先级是动态更新的，这里需要处理
         requests_queue.push(req_id);
+    }
+
+    void update_tag_heat(int epoch) {
+        // 计算每个标签在每个epoch中的热度
+        // 在一个窗口内的epoch中，读得越多越热，删得越少越热，tag_heat[t][e] = tag_info[t][e, e + 1, ...][read] /...[delete]
+        // 这里的窗口大小可以调整
+        int window_size = 2; 
+        std::vector<int> read_sum(numTag + 1, 0);    // 每个标签在每个epoch中的读的数量
+        std::vector<int> delete_sum(numTag + 1, 0);  // 每个标签在每个epoch中的删除的数量
+        for (int tag = 1; tag <= numTag; tag++) {
+            for (int i = epoch; i <= tag_info[0].size() && i < epoch + window_size; i++) {
+                read_sum[tag] += tag_info[tag][i][2];
+                delete_sum[tag] += tag_info[tag][i][0]; 
+            } 
+            tag_heat[tag][epoch] = static_cast<float>read_sum[tag] / (static_cast<float>delete_sum[tag] + 1.0); // 加1防止除以0;
+        }
     }
 
     /*
@@ -120,17 +142,10 @@ public:
 
     /*
      * @Description: 写入对象到磁盘，保存写入对象信息到saved_objects
-     * @param object_id: 要写入的对象ID
-     * @param size: 要写入的对象大小
-     * @param tag: 要写入的对象标签
+     * @param obj: 要写入的对象
      * @return: 写入的对象信息
      */
-    Object write_object(int object_id, int size, int tag) {
-        Object obj;
-        obj.id = object_id;
-        obj.tag = tag;
-        obj.size = size;
-        
+    Object write_object(Object obj) {        
         // 为三个副本选择不同磁盘
         std::vector<int> selected_disks = select_write_disk(object_id, tag, size);
         if (selected_disks.size() < REP_NUM) {

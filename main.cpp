@@ -22,7 +22,7 @@ void delete_action() {
     scanf("%d", &n_delete);
     std::vector<int> delete_object_ids(n_delete);
     std::vector<int> aborted_requests_ids;
-    aborted_requests_ids.reverse(n_delete); // 预留空间，节省时间
+    aborted_requests_ids.reserve(n_delete); // 预留空间，节省时间
     for (int i = 0; i < n_delete; i++) {
         scanf("%d", &delete_object_ids[i]);
     }
@@ -44,16 +44,19 @@ void delete_action() {
     fflush(stdout);
 }
 
-void write_action()
+void write_action(int timestamp)
 {
     int n_write;
     scanf("%d", &n_write);
+    int epoch = (timestamp - 1) / FRE_PER_SLICING;
     // 优先分配标签热度高的，一样高时优先分配大小大的对象
-    auto comp = [](const Object& a, const Object& b) {
-        if (diskScheduler.tag_heat[a.tag] != diskScheduler.tag_heat[b.tag])
-            return diskScheduler.tag_heat[a.tag] < diskScheduler.tag_heat[b.tag];
-        return a.size > b.size;
-    }
+    auto comp = [epoch](const Object& a, const Object& b) {
+        float a_heat = diskScheduler.get_heat(a.tag, epoch), b_heat = diskScheduler.get_heat(b.tag, epoch);
+        if (a_heat != b_heat)
+            return a_heat < b_heat;
+        else
+            return a.size > b.size;
+        };
     std::priority_queue<Object, std::vector<Object>, decltype(comp)> objects_to_be_written(comp);
 
     for (int i = 1; i <= n_write; i++) {
@@ -65,7 +68,7 @@ void write_action()
     }
     while (!objects_to_be_written.empty()) {
         Object obj = diskScheduler.write_object(objects_to_be_written.top());
-        for (int j = 0; j < REP_NUM; J++) {
+        for (int j = 0; j < REP_NUM; j++) {
             printf("%d ", obj.replicas[j].disk_id);
             for (int unit : obj.replicas[j].units) {
                 printf("%d ", unit);
@@ -106,8 +109,8 @@ int main() {
     scanf("%d%d%d%d%d", &T, &M, &N, &V, &G);
     // (T - 1) / FRE_PER_SLICING + 1 等价于 ceil(T / 1800)
     int n_epoch = (T - 1) / FRE_PER_SLICING + 1;    // 每1800时间片一个epoch
-    // 用一个三维数组tag_info[tag][epoch][删/写/读]存储每个标签在每个epoch中删除、写入、读取的对象块数量
-    std::vector<std::vector<std::array<int, 3>>> tag_info(M + 1, std::vector<std::array<int, 3>>(n_epoch + 1, {0, 0, 0}))
+    // 用一个三维数组tag_info[tag][epoch][删/写/读]存储每个标签在每个epoch（从0开始）中删除、写入、读取的对象块数量
+    std::vector<std::vector<std::vector<int>>> tag_info(M + 1, std::vector<std::vector<int>>(n_epoch, std::vector<int>(3)));
 
     // 读取每个标签分别删除了几个对象块
     for (int i = 1; i <= M; i++) {
@@ -132,7 +135,7 @@ int main() {
     fflush(stdout);
 
     // 磁盘调度器，用于控制读写删操作
-    diskScheduler = DiskScheduler(M, N, V, G);
+    diskScheduler = DiskScheduler(M, N, V, G, tag_info);
 
     for (int t = 1; t <= T + EXTRA_TIME; t++) {
         // 每个epoch更新一次标签热度
@@ -141,7 +144,7 @@ int main() {
         }
         timestamp_action();
         delete_action();
-        write_action();
+        write_action(t);
         read_action(t);
     }
 

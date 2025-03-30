@@ -6,3 +6,4 @@
 #define FRE_PER_SLICING (1800)
 #define EXTRA_TIME (105)
 #define MAX_OBJ_SIZE (5)
+#define WINDOW_SIZE (2)

@@ -1,7 +1,13 @@
 enum class Status {
     PENDING,    // 还没开始读的
+<<<<<<< HEAD
+    READING,    // 正在连续读的
+    COMPLETED   // 已经读完的
+};
+=======
     READING     // 正在连续读的
 }
+>>>>>>> c44131c43bc27aee550194525e48326be8fbaf08
 
 class Request {
 public:
@@ -14,6 +20,11 @@ public:
     // int processed_units = 0; // 已处理单元数
     float priority;    // 优先级
     int responsible_disk_id;    // 负责该请求的磁盘id，-1表示还没分配
+
+    Request() {
+        this->req_id = -1;
+        this->status = Status::COMPLETED;
+    }
 
     Request(int req_id, int object_id, int start_timestamp) {
         this->req_id = req_id;

@@ -1,6 +1,7 @@
 #include <iostream>
 #include <list>
 #include <vector>
+#include <utility>
 
 #include "limit.h"
 
@@ -10,6 +11,11 @@ struct Block {
     int size;   // 块大小
 
     Block(int s, int sz) : start(s), size(sz) {}
+
+    // 计算块的结束位置（不包括）
+    int end() {
+        return start + size;
+    }
 };
 
 // 分离空闲链表管理器
@@ -27,18 +33,18 @@ private:
     */
     std::vector<int> allocate_contiguous(int requestSize) {
         for (int i = MAX_OBJ_SIZE; i >= requestSize - 1; --i) {
-            auto& bucket = buckets[i];
+            std::list<Block>& bucket = buckets[i];
             if (!bucket.empty()) {
-                auto best_it;
+                std::list<Block>::iterator best_it;
                 if (i == MAX_OBJ_SIZE) {
                     best_it = std::max_element(bucket.begin(), bucket.end(), 
-                        [](const Block& a, const Block& b){ return a.size > b.size; });
+                        [](const Block& a, const Block& b){ return a.size < b.size; });
                 }
                 else {
                     best_it = bucket.begin();
                 }
 
-                Block block = *best_it;
+                Block block = std::move(*best_it);
                 bucket.erase(best_it);
     
                 // 分割处理
@@ -52,6 +58,7 @@ private:
                 for (int i = 1; i <= requestSize; ++i) {
                     units[i] = block.start + i - 1;
                 }
+
                 return units;
             }
         }
@@ -93,7 +100,7 @@ private:
             
             // 注意，调用非连续分配方法时，已经没有buckets[MAX_OBJ_SIZE]了
             // 尝试分配每个部分
-            for (const pair<int, int>& part : partation) {
+            for (const std::pair<int, int>& part : partation) {
                 if (buckets[part.first - 1].size() < part.second) {
                     success = false;
                     break;
@@ -102,11 +109,11 @@ private:
             
             // 按照该方案进行分配
             if (success) {
-                for (const pair<int, int>& part : partation) {
+                for (const std::pair<int, int>& part : partation) {
                     for (int i = 0; i < part.second; ++i) {
-                        auto allocated = allocate_contiguous(part.first);
-                        for (auto it = allocaed.begin(); it != allocated.end(); ++it) {
-                            units.emplace_back(*it);
+                        std::vector<int> allocated = allocate_contiguous(part.first);
+                        for (int j = 1; j < allocated.size(); ++j) {
+                            units.emplace_back(allocated[j]);
                         }
                     }
                 }
@@ -127,53 +134,59 @@ private:
             merged = false;
             // 遍历所有桶
             for (int b = 0; b < buckets.size(); ++b) {
-                for (auto it = buckets[b].begin(); it != buckets[b].end(); ++it) {
+                auto it = buckets[b].begin();
+                while (it != buckets[b].end()) {
                     // 若该空闲块在 newBlock 之前且正好相邻
                     if (it->end() == newBlock.start) {
                         newBlock.start = it->start;         // 合并到前面
                         newBlock.size += it->size;
                         buckets[b].erase(it);
                         merged = true;
-                        break;
+                        // break;
                     }
                     // 或者该空闲块在 newBlock 之后，正好相邻
                     else if (newBlock.end() == it->start) {
                         newBlock.size += it->size;
                         buckets[b].erase(it);
                         merged = true;
-                        break;
+                        // break;
+                    }
+                    else {
+                        ++it;
                     }
                 }
                 if (merged) break;
             }
         }
         int bucketIndex = (newBlock.size <= MAX_OBJ_SIZE) ? (newBlock.size - 1) : MAX_OBJ_SIZE;
-        buckets[bucketIndex].push_back(newBlock);
+        buckets[bucketIndex].emplace_back(newBlock);
     }
 
 public:
     SegregatedFreeList() : buckets(MAX_OBJ_SIZE + 1) {}
-    // 初始化时整个磁盘内存从 0 到 totalSize 为连续空闲区域
+    // 初始化时整个磁盘内存从 1 到 totalSize 为连续空闲区域
     // TODO: 考虑有没有更好的初始化方法，例如为预处理得知的读取较多的对象预先分配专属的空间区域
     SegregatedFreeList(int totalSize) : buckets(MAX_OBJ_SIZE + 1) {
-        buckets[MAX_OBJ_SIZE].emplace_back(Block(1, totalSize));
+        buckets[MAX_OBJ_SIZE].emplace_back(1, totalSize);
     }
     
     // 分配 requestSize 大小的内存块
     // 返回分配的内存块，如果分配失败返回空数组
     std::vector<int> allocate(int requestSize) {
-        std::vector<int> allocated;
+        std::vector<int> allocated = allocate_contiguous(requestSize);
         // 优先尝试分配连续空间
-        if (allocated = allocate_contiguous(requestSize)) {
+        if (allocated.size() > 1) {
             return allocated;
         }
-            
-        // 无法连续分配时采用分块策略
-        if (allocated = allocate_fragmented(requestSize)) {
-            return allocated;
+        else {
+            allocated = allocate_noncontiguous(requestSize);
+            if (allocated.size() > 1) {
+                return allocated;
+            }
+            else {
+                return {};
+            }
         }
-
-        return {};
     }
 
     // 释放磁盘块，将其归还到对应的空闲链表中
@@ -183,7 +196,7 @@ public:
         int current_start = allocated_units[1]; // 跳过首元素
         int current_size = 1;
         
-        for (size_t i = 2; i < allocated_units.size(); ++i) {
+        for (int i = 2; i < allocated_units.size(); ++i) {
             if (allocated_units[i] == allocated_units[i-1] + 1) {
                 current_size++;
             } else {
@@ -220,7 +233,7 @@ public:
     }
 
     // 用于调试，打印所有桶中的空闲块信息
-    void printBuckets() {
+    /*void printBuckets() {
         for (size_t i = 0; i < buckets.size(); ++i) {
             std::cout << "Bucket " << i << " (size " << (i+1) << (i==MAX_OBJ_SIZE?" or larger": "") << "): ";
             for (const auto& blk : buckets[i]) {
@@ -228,5 +241,5 @@ public:
             }
             std::cout << "\n";
         }
-    }
+    }*/
 };

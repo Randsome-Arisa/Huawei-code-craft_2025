@@ -1,13 +1,8 @@
 enum class Status {
     PENDING,    // 还没开始读的
-<<<<<<< HEAD
     READING,    // 正在连续读的
     COMPLETED   // 已经读完的
 };
-=======
-    READING     // 正在连续读的
-}
->>>>>>> c44131c43bc27aee550194525e48326be8fbaf08
 
 class Request {
 public:

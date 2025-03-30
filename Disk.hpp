@@ -23,11 +23,7 @@ public:
         this->id = id;
         this->size = size;
         this->used_units = 0;
-<<<<<<< HEAD
         this->head_point = 1;
-=======
-        this->head_point = 0;
->>>>>>> c44131c43bc27aee550194525e48326be8fbaf08
         this->last_action_is_read = false;
         int last_token_cost = 0;
     }

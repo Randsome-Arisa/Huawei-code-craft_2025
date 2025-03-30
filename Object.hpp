@@ -18,7 +18,6 @@ public:
 
     Replica replicas[REP_NUM]; // 3个备份的信息
 
-<<<<<<< HEAD
     Object() {
         this->id = -1;
         is_deleted = true;
@@ -31,7 +30,4 @@ public:
         }
         is_deleted = false;
     }
-=======
-    Object(int id, int tag, int size) : id(id), tag(tag), size(size) {}
->>>>>>> c44131c43bc27aee550194525e48326be8fbaf08
 };

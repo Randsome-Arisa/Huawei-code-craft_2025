@@ -195,7 +195,20 @@ public:
                         break;
                     }
                 }
-                // 虽然删了，但是在requests_queue中还存在，因此需要在后续提取时判断，并将COMPLETED的请求pop掉
+
+                // 从requests_queue中删除该请求，创建一个新的临时 priority_queue
+                RequestQueue new_queue;
+                // 逐个取出元素，重新插入到新队列（跳过要删除的元素）
+                while (!requests_queue.empty()) {
+                    int top = requests_queue.top();
+                    requests_queue.pop();
+                    if (top != deleted_request_id) {
+                        new_queue.push(top);
+                    }
+                }
+                // 用新的队列替换旧的队列
+                requests_queue = std::move(new_queue);
+
                 deleted_request_ids.emplace_back(deleted_request_id);
             }
         }

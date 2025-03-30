@@ -140,16 +140,16 @@ private:
                     if (it->end() == newBlock.start) {
                         newBlock.start = it->start;         // 合并到前面
                         newBlock.size += it->size;
-                        buckets[b].erase(it);
+                        it = buckets[b].erase(it);
                         merged = true;
-                        // break;
+                        break;
                     }
                     // 或者该空闲块在 newBlock 之后，正好相邻
                     else if (newBlock.end() == it->start) {
                         newBlock.size += it->size;
-                        buckets[b].erase(it);
+                        it = buckets[b].erase(it);
                         merged = true;
-                        // break;
+                        break;
                     }
                     else {
                         ++it;
@@ -231,15 +231,4 @@ public:
             return 1;
         }
     }
-
-    // 用于调试，打印所有桶中的空闲块信息
-    /*void printBuckets() {
-        for (size_t i = 0; i < buckets.size(); ++i) {
-            std::cout << "Bucket " << i << " (size " << (i+1) << (i==MAX_OBJ_SIZE?" or larger": "") << "): ";
-            for (const auto& blk : buckets[i]) {
-                std::cout << "[" << blk.start << ", " << blk.end() << ") ";
-            }
-            std::cout << "\n";
-        }
-    }*/
 };

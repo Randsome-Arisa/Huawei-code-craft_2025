@@ -21,7 +21,6 @@ void delete_action(DiskScheduler& diskScheduler) {
     scanf("%d", &n_delete);
     std::vector<int> delete_object_ids(n_delete);
     std::vector<int> aborted_requests_ids;
-    aborted_requests_ids.reserve(n_delete); // 预留空间，节省时间
     for (int i = 0; i < n_delete; i++) {
         scanf("%d", &delete_object_ids[i]);
     }

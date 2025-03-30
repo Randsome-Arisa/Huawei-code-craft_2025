@@ -17,8 +17,8 @@ private:
     // 维护一个二维标签热度数组tag_heat[tag][epoch]，本轮和下一轮中（这个窗口可以调整）该标签读得越多越热，删得越少越热
     std::vector<std::vector<float>> tag_heat;
     std::vector<Disk> disks;
-    std::vector<Object> saved_objects;    // <object_id, Object>
-    std::vector<Request> requests;    // <request_id，Request>
+    std::unordered_map<int, Object> saved_objects;    // <object_id, Object>
+    std::unordered_map<int, Request> requests;    // <request_id，Request>
     
     using RequestQueue = std::priority_queue<int, std::vector<int>, std::function<bool(int, int)>>;
     RequestQueue requests_queue;  // 请求的优先队列，存储请求id
@@ -115,7 +115,7 @@ private:
 
 public:
     DiskScheduler(int M, int numDisks, int disk_size, int G, std::vector<std::vector<std::vector<int>>> tag_info, std::vector<std::vector<float>> tag_heat)
-        : disks(MAX_DISK_NUM), saved_objects(MAX_OBJECT_NUM), requests(MAX_REQUEST_NUM), working_disks(MAX_DISK_NUM),
+        : disks(MAX_DISK_NUM), working_disks(MAX_DISK_NUM),
         requests_queue([this](int request_id1, int request_id2) -> bool {
             Request& req1 = requests[request_id1];
             Request& req2 = requests[request_id2];
@@ -143,12 +143,10 @@ public:
     void update_tag_heat(int epoch) {
         // 计算每个标签在每个epoch中的热度
         // 在一个窗口内的epoch中，读得越多越热，删得越少越热，tag_heat[t][e] = tag_info[t][e, e + 1, ...][read] /...[delete]
-        // 这里的窗口大小可以调整
-        int window_size = 2; 
         std::vector<int> read_sum(numTag + 1, 0);    // 每个标签在每个epoch中的读的数量
         std::vector<int> delete_sum(numTag + 1, 0);  // 每个标签在每个epoch中的删除的数量
         for (int tag = 1; tag <= numTag; tag++) {
-            for (int i = epoch; i < tag_info[1].size() && i < epoch + window_size; i++) {
+            for (int i = epoch; i < tag_info[1].size() && i < epoch + WINDOW_SIZE; i++) {
                 read_sum[tag] += tag_info[tag][i][2];
                 delete_sum[tag] += tag_info[tag][i][0]; 
             }
@@ -166,7 +164,7 @@ public:
      * @return: 若删除的对象在请求队列中，返回被删除的请求id数组，否则返回{}
      */
     std::vector<int> delete_object(int object_id) {
-        if (saved_objects[object_id].is_deleted)
+        if (saved_objects.find(object_id) == saved_objects.end())
             return {};
         
         Object& obj = saved_objects[object_id];
@@ -181,15 +179,16 @@ public:
             disks[disk_id].tag_slot_num[obj.tag] -= obj.size;
             disks[disk_id].used_units -= obj.size;
         }
-        saved_objects[object_id].is_deleted = true;
+
+        saved_objects.erase(object_id);
         // 如果删除时还没读完，就撤销
         std::vector<int> deleted_request_ids;
-        for (int j = 1; j < MAX_REQUEST_NUM; j++) {
-            if (requests[j].status != Status::COMPLETED && requests[j].object_id == object_id) {
-                int deleted_request_id = requests[j].req_id;
-                requests[deleted_request_id].status = Status::COMPLETED;
+        for (std::pair<const int, Request>& Irequest : requests) {
+            Request& request = Irequest.second;
+            if (request.object_id == object_id) {
+                request.status = Status::COMPLETED;
                 for (int k = 1; k <= numDisks; k++) {
-                    if (working_disks[k].request_id == deleted_request_id) {
+                    if (working_disks[k].request_id == request.req_id) {
                         working_disks[k].request_id = -1;
                         working_disks[k].unit_to_be_read = std::queue<int>();
                         break;
@@ -202,14 +201,14 @@ public:
                 while (!requests_queue.empty()) {
                     int top = requests_queue.top();
                     requests_queue.pop();
-                    if (top != deleted_request_id) {
+                    if (top != request.req_id) {
                         new_queue.push(top);
                     }
                 }
                 // 用新的队列替换旧的队列
                 requests_queue = std::move(new_queue);
 
-                deleted_request_ids.emplace_back(deleted_request_id);
+                deleted_request_ids.emplace_back(request.req_id);
             }
         }
         if (deleted_request_ids.empty()) {
@@ -246,7 +245,6 @@ public:
         }
         
         saved_objects[obj.id] = obj;
-        saved_objects[obj.id].is_deleted = false;
     }
 
     /*
@@ -263,7 +261,7 @@ public:
             int best_req_id = requests_queue.top();
             // 如果是已经被删除的对象，状态会是 COMPLETED
             // 注意这里不会是经过读取后的完成状态，那种情况会在后面被直接处理
-            if (requests[best_req_id].status == Status::COMPLETED) {
+            if (requests.find(best_req_id) == requests.end()) {
                 requests_queue.pop();
                 continue;
             }
@@ -344,6 +342,7 @@ public:
                            completed_requests.emplace_back(cur_req_id);
                            working_disks[i].request_id = -1;
                            requests[cur_req_id].status = Status::COMPLETED;
+                           requests.erase(cur_req_id);
                         }
                         break;
                     }
@@ -358,6 +357,7 @@ public:
                             completed_requests.emplace_back(cur_req_id);
                             working_disks[i].request_id = -1;
                             requests[cur_req_id].status = Status::COMPLETED;
+                            requests.erase(cur_req_id);
                         }
                     }
                 }

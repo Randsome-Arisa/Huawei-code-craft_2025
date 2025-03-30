@@ -1,11 +1,8 @@
 #include <queue>
 #include <algorithm>
 #include <string>
-<<<<<<< HEAD
 #include <cmath>
 #include <functional>
-=======
->>>>>>> c44131c43bc27aee550194525e48326be8fbaf08
 
 #include "Disk.hpp"
 #include "Object.hpp"
@@ -13,7 +10,6 @@
 
 class DiskScheduler {
 private:
-<<<<<<< HEAD
     int numTag;   // tag数
     int numDisks;
     int G;
@@ -26,51 +22,21 @@ private:
     
     using RequestQueue = std::priority_queue<int, std::vector<int>, std::function<bool(int, int)>>;
     RequestQueue requests_queue;  // 请求的优先队列，存储请求id
-=======
-    static int numTag;   // tag数
-    static int numDisks;
-    static int G;
-    static std::vector<std::vector<std::vector<int>>> tag_info; // 每个标签在每个epoch中删除、写入、读取的对象块数量
-    // 维护一个二维标签热度数组tag_heat[tag][epoch]，本轮和下一轮中（这个窗口可以调整）该标签读得越多越热，删得越少越热
-    static std::vector<std::vector<float>> tag_heat;
-    static std::vector<Disk> disks;
-    static std::unordered_map<int, Object> saved_objects;    // <object_id, Object>
-    static std::unordered_map<int, Request> requests;    // <request_id，Request>
-    
-    // 比较优先级
-    static bool cmp(int request_id1, int request_id2) {
-        Request& req1 = requests[request_id1];
-        Request& req2 = requests[request_id2];
-        return req1.priority > req2.priority; 
-    }
-    using RequestQueue = std::priority_queue<int, std::vector<int>, decltype(cmp)>;
-    static RequestQueue requests_queue;  // 请求的优先队列，存储请求id
->>>>>>> c44131c43bc27aee550194525e48326be8fbaf08
 
     // 磁盘负责的请求任务
     struct Task {
         int request_id = -1;  // 请求id，-1表示没有任务
-<<<<<<< HEAD
         int object_id = -1;  // 对象id
-=======
-        int objrct_id = -1;  // 对象id
->>>>>>> c44131c43bc27aee550194525e48326be8fbaf08
         int disk_id = -1;     // 磁盘id
         std::queue<int> unit_to_be_read;  // 待读取的存储块
     };
     std::vector<Task> working_disks;  // 有工作的磁盘，working_disks[i]表示i号磁盘负责的任务
 
     bool have_idle_disk() {
-<<<<<<< HEAD
         for (int i = 1; i <= numDisks; ++i) {
             if (working_disks[i].request_id == -1) {
                 return true;
             }
-=======
-        for (auto& task : working_disks) {
-            if (task.request_id == -1)
-                return true;
->>>>>>> c44131c43bc27aee550194525e48326be8fbaf08
         }
         return false;
     }
@@ -111,17 +77,10 @@ private:
                 return a.second > b.second;
             });
 
-<<<<<<< HEAD
         if (candidate_disks.size() < 3)
             return {};
         else
             return std::vector<int>({candidate_disks[0].first, candidate_disks[1].first, candidate_disks[2].first});
-=======
-        if (candidate_disks.empty())
-            return {};
-        else
-            return std::vector<int>({candidate_disks[0].first.id, candidate_disks[1].first.id, candidate_disks[2].first.id});
->>>>>>> c44131c43bc27aee550194525e48326be8fbaf08
     }
 
      // TODO: 完善优先级算法
@@ -133,32 +92,21 @@ private:
      */ 
      void set_priority(int request_id) {
         Request& req = requests[request_id];
-<<<<<<< HEAD
         if (req.status == Status::COMPLETED) {  // 如果已经完成，优先级最低
             req.priority = 0;
             return;
         }
-=======
->>>>>>> c44131c43bc27aee550194525e48326be8fbaf08
         if (req.status == Status::READING) {  // 如果正在读，优先级最高
             req.priority = 10000000;
             return;
         }
         // 简单地计算三个副本所在磁盘的磁头分别到该对象第一个存储单元的距离作为距离权重
         float distance_weight = 0.0f;
-<<<<<<< HEAD
         for (int i = 0; i < REP_NUM; i++) {
             distance_weight += static_cast<float>((saved_objects[req.object_id].replicas[i].units[0] + disks[i].size - disks[saved_objects[req.object_id].replicas[i].disk_id].head_point) % disks[i].size);
         }
         // 标签热度越高越优先读
         int epoch = (req.start_timestamp - 1) / FRE_PER_SLICING + 1;
-=======
-        for (int i = 1; i <= REP_NUM; i++) {
-            distance_weight += static_cast<float>((saved_objects[req.object_id].replicas[i].units[0] + disks[i].size - disks[saved_objects[req.object_id].replicas[i].disk_id].head_point) % disks[i].size);
-        }
-        // 标签热度越高越优先读
-        int epoch = (req.start_timestamp - 1) / FRE_PER_SLICING;
->>>>>>> c44131c43bc27aee550194525e48326be8fbaf08
         float tag_weight = tag_heat[saved_objects[req.object_id].tag][epoch];
 
         // 综合计算优先级
@@ -166,7 +114,6 @@ private:
     }
 
 public:
-<<<<<<< HEAD
     DiskScheduler(int M, int numDisks, int disk_size, int G, std::vector<std::vector<std::vector<int>>> tag_info, std::vector<std::vector<float>> tag_heat)
         : disks(MAX_DISK_NUM), saved_objects(MAX_OBJECT_NUM), requests(MAX_REQUEST_NUM), working_disks(MAX_DISK_NUM),
         requests_queue([this](int request_id1, int request_id2) -> bool {
@@ -178,13 +125,6 @@ public:
         this->numTag = M;
         this->numDisks = numDisks;
         this->G = G;
-=======
-    DiskScheduler(int M, int numDisks, int disk_size, int G, std::vector<std::vector<std::vector<int>>> tag_info) {
-        this->numTag = M;
-        this->numDisks = numDisks;
-        this->G = G;
-        disks.emplace_back();   // 从1开始索引
->>>>>>> c44131c43bc27aee550194525e48326be8fbaf08
         for (int i = 1; i <= numDisks; ++i) {
             disks[i] = Disk(i, disk_size);
         }
@@ -214,41 +154,9 @@ public:
             }
             tag_heat[tag][epoch] = static_cast<float>(read_sum[tag]) / (static_cast<float>(delete_sum[tag]) + 1.0); // 加1防止除以0;
         }
-        this->tag_info = tag_info;
-        this->update_tag_heat(1);   // 第一轮epoch
-        this->working_disks.reserve(numDisks + 1);
     }
 
-<<<<<<< HEAD
     float get_heat(int tag, int epoch) const {
-        return tag_heat[tag][epoch];
-=======
-    void add_request(int req_id, int object_id, int timestamp) {
-        Request req(req_id, object_id, timestamp);
-        requests[req_id] = req;
-        // ? 如果优先级是动态更新的，这里需要处理
-        set_priority(req_id);  // 计算优先级
-        requests_queue.push(req_id);
->>>>>>> c44131c43bc27aee550194525e48326be8fbaf08
-    }
-
-    void update_tag_heat(int epoch) {
-        // 计算每个标签在每个epoch中的热度
-        // 在一个窗口内的epoch中，读得越多越热，删得越少越热，tag_heat[t][e] = tag_info[t][e, e + 1, ...][read] /...[delete]
-        // 这里的窗口大小可以调整
-        int window_size = 2; 
-        std::vector<int> read_sum(numTag + 1, 0);    // 每个标签在每个epoch中的读的数量
-        std::vector<int> delete_sum(numTag + 1, 0);  // 每个标签在每个epoch中的删除的数量
-        for (int tag = 1; tag <= numTag; tag++) {
-            for (int i = epoch; i <= tag_info[0].size() && i < epoch + window_size; i++) {
-                read_sum[tag] += tag_info[tag][i][2];
-                delete_sum[tag] += tag_info[tag][i][0]; 
-            }
-            tag_heat[tag][epoch] = static_cast<float>(read_sum[tag]) / (static_cast<float>(delete_sum[tag]) + 1.0); // 加1防止除以0;
-        }
-    }
-
-    float get_heat(int tag, int epoch) {
         return tag_heat[tag][epoch];
     }
 
@@ -303,11 +211,7 @@ public:
      * @param obj: 要写入的对象
      * @return: 写入的对象信息
      */
-<<<<<<< HEAD
     void write_object(Object& obj) {        
-=======
-    Object write_object(Object obj) {        
->>>>>>> c44131c43bc27aee550194525e48326be8fbaf08
         // 为三个副本选择不同磁盘
         std::vector<int> selected_disks = select_write_disk(obj.id, obj.tag, obj.size);
         if (selected_disks.size() < REP_NUM) {
@@ -317,15 +221,11 @@ public:
 
         for (int i = 0; i < REP_NUM; i++) {
             int disk_id = selected_disks[i];
-<<<<<<< HEAD
             std::vector<int> allocated = disks[disk_id].sfl.allocate(obj.size);
             if (allocated.empty()) {
                 printf("fail to allocate units\n");
                 return;
             }
-=======
-            auto allocated = disks[disk_id].sfl.allocate(obj.size);
->>>>>>> c44131c43bc27aee550194525e48326be8fbaf08
             // 记录分配信息（带磁头优化标记）
             obj.replicas[i] = {disk_id, allocated};
             disks[disk_id].tag_slot_num[obj.tag] += obj.size;
@@ -333,11 +233,7 @@ public:
         }
         
         saved_objects[obj.id] = obj;
-<<<<<<< HEAD
         saved_objects[obj.id].is_deleted = false;
-=======
-        return obj;
->>>>>>> c44131c43bc27aee550194525e48326be8fbaf08
     }
 
     /*
@@ -392,16 +288,11 @@ public:
 
         // 开始读取操作
         for (int i = 1; i <= numDisks; i++) {
-<<<<<<< HEAD
             // 该磁盘没有工作
             if (working_disks[i].request_id == -1) {
                 points_action[i] = "#";
                 continue;
             }
-=======
-            if (working_disks[i].request_id == -1)
-                continue;  // 该磁盘没有工作
->>>>>>> c44131c43bc27aee550194525e48326be8fbaf08
             int cur_req_id = working_disks[i].request_id;
             int cur_obj_id = working_disks[i].object_id;
             std::queue<int>& unit_to_be_read = working_disks[i].unit_to_be_read;
@@ -433,11 +324,7 @@ public:
                 }
                 // distance==0，能读就读，否则等到下个时间片
                 else {
-<<<<<<< HEAD
                     int cost_token = disks[i].last_action_is_read ? std::max(16, static_cast<int>(std::ceil(static_cast<double>(disks[i].last_token_cost) * 0.8))) : 64;
-=======
-                    int cost_token = disks[i].last_action_is_read ? std::max(16, static_cast<int>(std::ceil(static_cast<float>(tokens) * 0.8))) : 64;
->>>>>>> c44131c43bc27aee550194525e48326be8fbaf08
                     // 等到下个时间片再读
                     if (tokens < cost_token) {            
                         if (unit_to_be_read.empty()) {
@@ -465,14 +352,6 @@ public:
             if (points_action[i].empty() || points_action[i][0] != 'j') {
                 points_action[i] += "#";
             }
-<<<<<<< HEAD
-=======
-
-            if (unit_to_be_read.empty()) {
-               completed_requests.emplace_back(cur_req_id);
-               working_disks[i].request_id = -1;
-            }
->>>>>>> c44131c43bc27aee550194525e48326be8fbaf08
         }
     }
 };
